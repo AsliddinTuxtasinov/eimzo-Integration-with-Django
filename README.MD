@@ -15,7 +15,7 @@
 |----|- ...
 |- docker-compose.yml
 ````
-You can create create your custom docker-compose.yml file.
+You can create your custom docker-compose.yml file.
 > docker-compose.yml
 > ```
 > e-imzo-server:
