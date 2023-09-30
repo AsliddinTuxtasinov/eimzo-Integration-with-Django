@@ -4,16 +4,16 @@
 
 ### Project Structure
 ````
-|--- e-imzo-server
-|---------|-- keys
-|---------|-----|-- keys
-|---------|-----|-----|-- ...
-|---------|-----|-- config.properties
-|---------|-- Dockerfile
-|--- config
-|---------|-- settings.py
-|---------|-- ...
-|--- docker-compose.yml
+|- e-imzo-server
+|----|- keys
+|----|----|- ...
+|----|- config.properties
+|----|- Dockerfile
+|----|- ...
+|- django_project
+|----|- settings.py
+|----|- ...
+|- docker-compose.yml
 ````
 You can create create your custom docker-compose.yml file.
 > docker-compose.yml
