@@ -1,6 +1,6 @@
 # E-imzo Integration with Django
 
-### E-imzo documentation [GitHub Pages](https://github.com/qo0p/e-imzo-doc/blob/master/README.md).
+### E-IMZO - INTEGRATION INSTRUCTIONS [GitHub Pages](https://github.com/qo0p/e-imzo-doc/blob/master/README.md).
 
 ### Project Structure
 ````
