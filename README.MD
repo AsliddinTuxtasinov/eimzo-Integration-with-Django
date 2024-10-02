@@ -30,15 +30,14 @@ You can create your custom docker-compose.yml file.
 > ```
 
 ### Script codes
-```
+```python
 import requests
 from rest_framework import views, permissions, exceptions, response, status
 
 from rest_framework.request import Request
 ```
-```
+```python
 class EimzoServiceApi:
-
     def __init__(self):
         # Define the URLs for authentication, PKCS#7 verification, and joining.
         self.VERIFY_URL = "http://e-imzo-server:8080/backend/pkcs7/verify"
@@ -47,6 +46,18 @@ class EimzoServiceApi:
         self.TIME_STAMP_URL = "http://e-imzo-server:8080/frontend/timestamp/pkcs7"
 
         self.CHALLENGE_URL = "http://e-imzo-server:8080/frontend/challenge"
+        self.BACKEND_AUTH_URL = "http://e-imzo-server:8080/backend/auth"
+
+        self.ERR_STATUS_CODES = {
+            -1: "Неудалось проверить статус сертификата.Посмотрите лог E - IMZO - SERVER.",
+            -10: "ЭЦП недействительна",
+            -11: "Сертификат недействителен",
+            -12: "Сертификат недействителен на дату подписи",
+            -20: "Неудалось проверить статус сертификата Timestamp.Посмотрите лог E - IMZO - SERVER.",
+            -21: "ЭЦП или хеш Timestamp недействительна",
+            -22: "Сертификат Timestamp недействителен",
+            -23: "Сертификат Timestamp недействителен на дату подписи",
+        }
 
     @staticmethod
     def get_user_ip(request: Request) -> str:
@@ -57,7 +68,6 @@ class EimzoServiceApi:
         Returns:
             str: The user's IP address.
         """
-        
         x_real_ip = request.META.get("HTTP_X_REAL_IP")
         remote_addr = request.META.get("REMOTE_ADDR")
 
@@ -77,34 +87,26 @@ class EimzoServiceApi:
         Returns:
             dict: A dictionary containing headers.
         """
-        
         return {
             "Host": request.environ.get("HTTP_HOST"),
             "X-Real-IP": self.get_user_ip(request),
         }
 
-    def eimzo_challenge(self, request: Request):
-        url = self.CHALLENGE_URL
-        headers = self.get_headers(request)
-
-        res = requests.get(url, headers=headers)
-        return res.status_code, res
-
     def timestamp_pkcs7(self, pkcs7: str, request: Request) -> tuple:
         """
-            Attach a timestamp token to a PKCS#7 document.
-            Args:
-                pkcs7 (str): The PKCS#7 document as a string.
-                request (Request): The HTTP request object used to send the request.
-            Returns:
-                tuple: A tuple containing the HTTP status code and the response object.
-            This method is used to attach a timestamp token to a PKCS#7 document. It sends a POST
-            request to the timestamp service with the PKCS#7 data and returns the HTTP status code
-            and the response object.
+        Attach a timestamp token to a PKCS#7 document.
+        Args:
+            pkcs7 (str): The PKCS#7 document as a string.
+            request (Request): The HTTP request object used to send the request.
+        Returns:
+            tuple: A tuple containing the HTTP status code and the response object.
+        This method is used to attach a timestamp token to a PKCS#7 document.
+        It sends a POST
+        request to the timestamp service with the PKCS#7 data and returns the HTTP status code
+        and the response object.
 
-            This method is needed to attach a timestamp token to a PKCS#7 document.
+        This method is needed to attach a timestamp token to a PKCS#7 document.
         """
-        
         time_stamp_url = f"{self.TIME_STAMP_URL}"
         headers = self.get_headers(request)
 
@@ -120,14 +122,15 @@ class EimzoServiceApi:
         Returns:
             tuple: A tuple containing a boolean indicating status_code and the verification result.
         """
-        
         verify_url = f"{self.VERIFY_URL}/attached"
         headers = self.get_headers(request)
 
         res = requests.post(verify_url, data=pkcs7wtst, headers=headers)
         return res.status_code, res
 
-    def pkcs7_join(self, pkcs7_data_1: str, pkcs7_data_2: str, request: Request) -> tuple:
+    def pkcs7_join(
+        self, pkcs7_data_1: str, pkcs7_data_2: str, request: Request
+    ) -> tuple:
         """
         Join two PKCS#7 data sets using the EIMZO service.
         Args:
@@ -137,7 +140,6 @@ class EimzoServiceApi:
         Returns:
             tuple: A tuple containing a boolean indicating status_code and the joining result.
         """
-        
         data = f"{pkcs7_data_1}|{pkcs7_data_2}"
         join_url = f"{self.JOIN_URL}"
         headers = self.get_headers(request)
@@ -145,11 +147,97 @@ class EimzoServiceApi:
         res = requests.post(join_url, headers=headers, data=data)
         return res.status_code, res
 ```
-### Define a custom API view class called SavePkcsView
+```python
+class EimzoLoginServiceApi(EimzoServiceApi):
+    def __init__(self):
+        # Call the parent class constructor
+        super().__init__()
+
+        # Define a dictionary to map error status codes to human-readable messages
+        self.ERR_STATUS_CODES = {
+            1: "Успешно",  # Successful
+            -1: "Неудалось проверить статус сертификата. Посмотрите лог E - IMZO - SERVER.",
+            -5: "Время подписи недействительна. Проверьте дату и время компьютера пользователя.",
+            -10: "ЭЦП недействительна",  # E-signature is invalid
+            -11: "Сертификат недействителен",  # Certificate is invalid
+            -12: "Сертификат недействителен на дату подписи",  # Certificate is invalid at the signing date
+            -20: "Не найден challenge или срок его истек. Повторите заного.",  # Challenge not found or expired
+        }
+
+    # Method to request a challenge from the EIMZO server
+    def eri_challenge(self, request: Request):
+        url = self.CHALLENGE_URL  # URL for challenge request
+        headers = self.get_headers(request)  # Retrieve necessary headers for the request
+
+        # Send a GET request to the EIMZO challenge endpoint
+        res = requests.get(url, headers=headers)
+
+        # If the response status is not 200 (success), return failure status with details
+        if res.status_code != 200:
+            return False, res.status_code, res.json()
+
+        # Otherwise, return success status with the response
+        return True, res.status_code, res.json()
+
+    # Method for backend authentication using the provided PKCS7 data
+    def eri_backend_auth(self, request: Request, pkcs7: str):
+        url = self.BACKEND_AUTH_URL  # URL for backend authentication
+        headers = self.get_headers(request)  # Retrieve necessary headers for the request
+
+        # Send a POST request to the backend auth URL with the PKCS7 data
+        res = requests.post(url, headers=headers, data=pkcs7)
+
+        # If the response status is not 200, return failure status with details
+        if res.status_code != 200:
+            return False, res.status_code, res.json()
+
+        # Check the response JSON for the "status" key to determine success
+        success_status = res.json().get("status")
+
+        # If the status is not 1 (success), return the corresponding error message
+        if success_status != 1:
+            return (
+                False,
+                res.status_code,
+                self.ERR_STATUS_CODES.get(
+                    success_status,
+                    "Something went wrong please contact the administrator"
+                    # Default error message if status is unknown
+                ),
+            )
+
+        # If successful, return success status with the response
+        return True, res.status_code, res.json()
+
+    @staticmethod
+    # Static method to determine user type based on subjectName
+    def get_user_type(subjectName):
+        """
+        Determines the user type based on subjectName.
+        subjectName -> dict (expected to be a dictionary of certificate details)
+        Returns:
+            user type: 1 -> Physic User, 2 -> Juridic User
+        """
+        if subjectName is None:
+            return False, "Could not determine user type"  # Handle None input
+
+        # Check if the subject name contains a specific key indicating a Juridic User
+        if subjectName.get("1.2.860.3.16.1.1"):
+            return True, 2  # Juridic User (legal entity)
+
+        # Check if the subject name contains a specific key indicating a Physic User
+        if subjectName.get("1.2.860.3.16.1.2"):
+            return True, 1  # Physic User (individual)
+
+        # If neither key is found, return an error message
+        return False, "Could not determine user type"
+
 ```
+### Define a custom API view class called SavePkcsView
+```python
 eimzo_service_api = EimzoServiceApi()
 ```
-```
+```python
 class SavePkcsView(views.APIView):
     # Specify permission classes for this view (requires authentication)
     permission_classes = (permissions.IsAuthenticated,)
@@ -228,7 +316,7 @@ class SavePkcsView(views.APIView):
 ```
 
 ### Define a custom API view class called PkcsVerify
-```
+```python
 class PkcsVerify(views.APIView):
 
     # Define a method for verifying a PKCS7 signature
